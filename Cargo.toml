@@ -1,0 +1,10 @@
+[package]
+name = "audio-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+backend = { path = "backend", package = "audio-backend" }
+log = "0.4.22"
+rustyline = { version = "15.0.0", features = ["derive"], default-features = false }
+simplelog = "0.12.2"
