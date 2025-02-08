@@ -81,12 +81,30 @@ fn test_tokenize() {
     assert_eq!(tokenize("hello world"), Some(VecDeque::from([Token::new("hello", 0, 5, false), Token::new("world", 6, 11, false)])));
     assert_eq!(tokenize("hello  world"), Some(VecDeque::from([Token::new("hello", 0, 5, false), Token::new("world", 7, 12, false)])));
     assert_eq!(tokenize(" hello world "), Some(VecDeque::from([Token::new("hello", 1, 6, false), Token::new("world", 7, 12, false)])));
-    assert_eq!(tokenize("say hello world"), Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("hello", 4, 9, false), Token::new("world", 10, 15, false)])));
-    assert_eq!(tokenize("say \"hello world\""), Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("hello world", 5, 16, true)])));
-    assert_eq!(tokenize("  say \"hello world\"  "), Some(VecDeque::from([Token::new("say", 2, 5, false), Token::new("hello world", 7, 18, true)])));
-    assert_eq!(tokenize("say \"hello world\" twice"), Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("hello world", 5, 16, true), Token::new("twice", 18, 23, false)])));
-    assert_eq!(tokenize("say \"nothing\" twice"), Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("nothing", 5, 12, true), Token::new("twice", 14, 19, false)])));
-    assert_eq!(tokenize("say \"\" twice"), Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("", 5, 5, true), Token::new("twice", 7, 12, false)])));
+    assert_eq!(
+        tokenize("say hello world"),
+        Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("hello", 4, 9, false), Token::new("world", 10, 15, false)]))
+    );
+    assert_eq!(
+        tokenize("say \"hello world\""),
+        Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("hello world", 5, 16, true)]))
+    );
+    assert_eq!(
+        tokenize("  say \"hello world\"  "),
+        Some(VecDeque::from([Token::new("say", 2, 5, false), Token::new("hello world", 7, 18, true)]))
+    );
+    assert_eq!(
+        tokenize("say \"hello world\" twice"),
+        Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("hello world", 5, 16, true), Token::new("twice", 18, 23, false)]))
+    );
+    assert_eq!(
+        tokenize("say \"nothing\" twice"),
+        Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("nothing", 5, 12, true), Token::new("twice", 14, 19, false)]))
+    );
+    assert_eq!(
+        tokenize("say \"\" twice"),
+        Some(VecDeque::from([Token::new("say", 0, 3, false), Token::new("", 5, 5, true), Token::new("twice", 7, 12, false)]))
+    );
     assert_eq!(tokenize("hello \"world"), None);
     assert_eq!(tokenize("hello\"world"), None);
 }
