@@ -1,3 +1,4 @@
+use super::{Callback, Command, Id, Param, Sub};
 use rustyline::completion::{Completer, Pair};
 use rustyline::{Context, Helper, Highlighter, Hinter, Validator};
 use std::collections::VecDeque;
@@ -5,32 +6,15 @@ use tokenizer::tokenize;
 
 mod tokenizer;
 
-const TRUE: &str = "true";
-const FALSE: &str = "false";
+const TRUE: &str = "on";
+const FALSE: &str = "off";
 
-pub trait Id: ToString + Clone {}
-
-pub struct Command<T: Id> {
-    id: T,
-    sub: Sub<T>,
-}
-
-pub enum Param {
-    String(String),
-    Bool,
-}
-
-pub enum Sub<T: Id> {
-    Commands(Vec<Command<T>>),
-    Params(Vec<Param>),
-    None,
-}
-
-#[derive(Debug)]
-pub enum Token<T: Id> {
+pub enum Token<'a, T: Id> {
     Command(T),
+    Callback(&'a Callback),
     ParamString(String),
     ParamBool(bool),
+    Missing,
     Invalid,
 }
 
@@ -70,30 +54,32 @@ impl<T: Id> CommandHelper<T> {
         if let Some(mut tokens) = tokenize(line) {
             let mut parse_result = VecDeque::new();
             let mut subs = &self.subs;
-            loop {
+            let mut proceed = true;
+            while proceed {
+                proceed = false;
                 match &subs {
                     Sub::Commands(commands) => match tokens.pop_front() {
                         Some(token) => match commands.iter().find(|cmd| cmd.id.to_string() == token.text && !token.quoted) {
                             Some(c) => {
                                 parse_result.push_back(Token::Command(c.id.clone()));
                                 subs = &c.sub;
+                                proceed = true;
                             }
                             None => {
                                 parse_result.push_back(Token::Invalid);
-                                for _ in tokens {
+                                for _ in &tokens {
                                     parse_result.push_back(Token::Invalid);
                                 }
-                                break;
                             }
                         },
-                        None => break,
+                        None => parse_result.push_back(Token::Missing),
                     },
                     Sub::Params(params) => {
                         for param in params {
                             match param {
                                 Param::String(_) => match tokens.pop_front() {
                                     Some(token) => parse_result.push_back(Token::ParamString(token.text)),
-                                    None => break,
+                                    None => parse_result.push_back(Token::Missing),
                                 },
                                 Param::Bool => match tokens.pop_front() {
                                     Some(token) => parse_result.push_back(if token.text == TRUE {
@@ -103,20 +89,19 @@ impl<T: Id> CommandHelper<T> {
                                     } else {
                                         Token::Invalid
                                     }),
-                                    None => break,
+                                    None => parse_result.push_back(Token::Missing),
                                 },
                             }
                         }
-                        for _ in tokens {
+                        for _ in &tokens {
                             parse_result.push_back(Token::Invalid);
                         }
-                        break;
                     }
-                    Sub::None => {
-                        for _ in tokens {
+                    Sub::None(cb) => {
+                        parse_result.push_back(Token::Callback(cb));
+                        for _ in &tokens {
                             parse_result.push_back(Token::Invalid);
                         }
-                        break;
                     }
                 }
             }
@@ -185,21 +170,21 @@ impl<T: Id> Completer for CommandHelper<T> {
                                 Param::Bool => match tokens.pop_front() {
                                     Some(token) if !token.quoted => {
                                         if (token.text == TRUE || token.text == FALSE) && line.len() > token.end {
-                                        } else if TRUE.starts_with(&token.text) {
-                                            pairs.push(Pair {
-                                                display: String::from(TRUE),
-                                                replacement: String::from(TRUE) + " ",
-                                            });
-                                            rpos = token.begin;
-                                            break;
-                                        } else if FALSE.starts_with(&token.text) {
-                                            pairs.push(Pair {
-                                                display: String::from(FALSE),
-                                                replacement: String::from(FALSE) + " ",
-                                            });
-                                            rpos = token.begin;
-                                            break;
                                         } else {
+                                            if TRUE.starts_with(&token.text) {
+                                                pairs.push(Pair {
+                                                    display: String::from(TRUE),
+                                                    replacement: String::from(TRUE) + " ",
+                                                });
+                                                rpos = token.begin;
+                                            }
+                                            if FALSE.starts_with(&token.text) {
+                                                pairs.push(Pair {
+                                                    display: String::from(FALSE),
+                                                    replacement: String::from(FALSE) + " ",
+                                                });
+                                                rpos = token.begin;
+                                            }
                                             break;
                                         }
                                     }
@@ -221,7 +206,7 @@ impl<T: Id> Completer for CommandHelper<T> {
                         }
                         break;
                     }
-                    Sub::None => break,
+                    Sub::None(_) => break,
                 }
             }
         }

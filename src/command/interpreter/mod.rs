@@ -1,60 +1,47 @@
-use crate::control::Controller;
-use helper::{Command, CommandHelper, Id, Param, Sub, Token};
+use helper::{CommandHelper, Token};
 use log::error;
 use rustyline::config::Builder;
 use rustyline::error::ReadlineError;
 use rustyline::history::MemHistory;
 use rustyline::{CompletionType, Editor};
 use std::collections::VecDeque;
-use std::fmt::Display;
 
 mod helper;
 
-#[derive(Clone, Copy, Debug)]
-enum Cmd {
-    Help,
-    Version,
-    Ap,
-    Auto,
-    Network,
-    List,
-    Add,
-    Delete,
+pub trait Id: ToString + Clone {}
+
+pub enum CallbackParameter {
+    String(String),
+    Bool(bool),
 }
 
-impl Display for Cmd {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = format!("{:?}", self);
-        write!(f, "{}", s.to_lowercase())
-    }
+type Callback = Box<dyn Fn(Vec<CallbackParameter>)>;
+
+pub struct Command<T: Id> {
+    id: T,
+    sub: Sub<T>,
 }
 
-impl Id for Cmd {}
-
-pub struct CommandLine {
-    ctrl: Controller,
-    rl: Editor<CommandHelper<Cmd>, MemHistory>,
+pub enum Param {
+    String(String),
+    Bool,
 }
 
-impl CommandLine {
-    pub fn new(ctrl: Controller) -> Self {
-        let commands = vec![
-            Command::new(Cmd::Help, Sub::None),
-            Command::new(Cmd::Version, Sub::None),
-            Command::new(Cmd::Ap, Sub::Commands(vec![Command::new(Cmd::Auto, Sub::Params(vec![Param::Bool]))])),
-            Command::new(
-                Cmd::Network,
-                Sub::Commands(vec![
-                    Command::new(Cmd::List, Sub::None),
-                    Command::new(Cmd::Add, Sub::Params(vec![Param::string("ssid"), Param::string("key")])),
-                    Command::new(Cmd::Delete, Sub::Params(vec![Param::string("ssid")])),
-                ]),
-            ),
-        ];
+pub enum Sub<T: Id> {
+    Commands(Vec<Command<T>>),
+    Params(Vec<Param>),
+    None(Callback),
+}
+
+pub struct Interpreter<T: Id> {
+    rl: Editor<CommandHelper<T>, MemHistory>,
+}
+
+impl<T: Id> Interpreter<T> {
+    pub fn new(commands: Vec<Command<T>>) -> Self {
         let mut rl = Editor::with_config(Builder::new().completion_type(CompletionType::List).build()).unwrap();
         rl.set_helper(Some(CommandHelper::new(commands)));
         Self {
-            ctrl,
             rl,
         }
     }
@@ -90,7 +77,34 @@ impl CommandLine {
         }
     }
 
-    fn interpret(&self, mut tokens: VecDeque<Token<Cmd>>) -> bool {
+    fn interpret(&self, tokens: VecDeque<Token<T>>) -> bool {
+        let mut ok = true;
+        let mut commands = vec![];
+        let mut params = vec![];
+        let mut callback = None;
+        for token in tokens {
+            match token {
+                Token::Command(cmd) => commands.push(cmd),
+                Token::ParamString(val) => params.push(CallbackParameter::String(val)),
+                Token::ParamBool(val) => params.push(CallbackParameter::Bool(val)),
+                Token::Callback(cb) => callback = Some(cb),
+                _ => ok = false,
+            }
+        }
+        if ok {
+            if let Some(cb) = callback {
+                cb(params);
+            } else {
+                println!("unimplemented");
+                ok = false;
+            }
+        } else {
+            println!("TODO: print usage");
+        }
+        ok
+    }
+
+    /*fn interpret(&self, mut tokens: VecDeque<Token<Cmd>>) -> bool {
         let mut ok = false;
         match tokens.pop_front() {
             Some(Token::Command(cmd)) => match cmd {
@@ -129,5 +143,5 @@ impl CommandLine {
             None => {}
         }
         ok
-    }
+    }*/
 }

@@ -1,9 +1,9 @@
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
-use cli::CommandLine;
+use command::Interface;
 use control::Controller;
 
-mod cli;
+mod command;
 mod control;
 
 fn main() {
@@ -15,5 +15,5 @@ fn main() {
     );
     let ctrl = Controller::new();
     println!("{} {}, backend {}", env!("CARGO_PKG_NAME"), env!("VERSION"), ctrl.backend_version());
-    CommandLine::new(ctrl).run();
+    Interface::new(ctrl).run();
 }
