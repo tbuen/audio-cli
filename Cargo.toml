@@ -5,6 +5,9 @@ edition = "2024"
 
 [dependencies]
 backend = { path = "backend", package = "audio-backend" }
+smart-repl = { path = "smart-repl" }
 log = "0.4"
-rustyline = { version = "15", features = ["derive"], default-features = false }
 simplelog = "0.12"
+
+[lints.clippy]
+pedantic = "warn"

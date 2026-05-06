@@ -2,3 +2,7 @@
 	path = backend
 	url = https://github.com/tbuen/audio-backend.git
 	branch = main
+[submodule "smart-repl"]
+	path = smart-repl
+	url = https://github.com/tbuen/smart-repl.git
+	branch = main

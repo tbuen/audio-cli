@@ -1,0 +1,23 @@
+name: clippy
+
+on: push
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install libdbus-1-dev
+      - name: clippy
+        run: cargo clippy --all-targets --all-features

@@ -6,11 +6,13 @@ pub struct Controller {
 
 impl Controller {
     pub fn new() -> Self {
-        let b = Backend::new();
+        let backend = Backend::new();
         //let r = b.receiver();
-        Controller {
-            backend: b,
-        }
+        Controller { backend }
+    }
+
+    pub fn backend_name(&self) -> &str {
+        backend::NAME
     }
 
     pub fn backend_version(&self) -> &str {
