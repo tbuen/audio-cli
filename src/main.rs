@@ -7,7 +7,7 @@ mod control;
 mod interface;
 
 fn main() {
-    let _ = TermLogger::init(
+    TermLogger::init(
         LevelFilter::Debug,
         ConfigBuilder::new()
             .add_filter_allow_str("audio_cli")
@@ -16,7 +16,8 @@ fn main() {
             .build(),
         TerminalMode::Stdout,
         ColorChoice::Auto,
-    );
+    )
+    .unwrap();
     let ctrl = Controller::new();
     println!("{} {}", env!("CARGO_PKG_NAME"), env!("VERSION"));
     Cli::new(&ctrl).run();

@@ -1,25 +1,29 @@
 use backend::Backend;
 
-pub struct Controller {
+pub(crate) struct Controller {
     backend: Backend,
 }
 
 impl Controller {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let backend = Backend::new();
-        //let r = b.receiver();
+        //let r = backend.receiver();
         Controller { backend }
     }
 
-    pub fn backend_name(&self) -> &str {
+    pub(crate) fn backend_name() -> &'static str {
         backend::NAME
     }
 
-    pub fn backend_version(&self) -> &str {
+    pub(crate) fn backend_version() -> &'static str {
         backend::VERSION
     }
 
-    pub fn set_access_point_mode(&self, auto: bool) {
+    pub(crate) fn get_access_point_mode(&self) -> bool {
+        self.backend.get_access_point_mode()
+    }
+
+    pub(crate) fn set_access_point_mode(&self, auto: bool) {
         self.backend.set_access_point_mode(auto);
     }
 }

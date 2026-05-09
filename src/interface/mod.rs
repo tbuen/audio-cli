@@ -1,40 +1,42 @@
 use crate::control::Controller;
 use smart_repl::{Args, Command, Group, Parameter, Repl};
 
-pub struct Cli<'a> {
+pub(crate) struct Cli<'a> {
     repl: Repl<'a, Controller>,
 }
 
 impl<'a> Cli<'a> {
-    pub fn new(ctrl: &'a Controller) -> Self {
+    pub(crate) fn new(ctrl: &'a Controller) -> Self {
         let repl = Repl::builder()
             .with_context(ctrl)
             .with_prompt(">> ")
             .with_help()
             .with_command(Command::new("version", version).with_help("Show version information."))
             .with_group(
-                Group::new("ap").with_command(
-                    Command::new("auto", ap_auto)
-                        .with_help("Switch automatic access point connection on/off.")
-                        .with_optional_parameter(Parameter::bool("value", "on", "off")),
-                ),
+                Group::new("ap")
+                    .with_help("Handle connection to the device's access point.")
+                    .with_command(
+                        Command::new("auto", ap_auto)
+                            .with_help("Switch automatic access point connection on/off.")
+                            .with_optional_parameter(Parameter::bool("value", "on", "off")),
+                    ),
             )
             .with_group(
                 Group::new("network")
-                    .with_help("Configure the access points to which the device should connect.")
+                    .with_help("Configure the networks to which the device should connect.")
                     .with_command(
                         Command::new("list", network_list)
-                            .with_help("Display the list of configured access points."),
+                            .with_help("Display the list of configured networks."),
                     )
                     .with_command(
                         Command::new("add", network_add)
-                            .with_help("Add an access point to the list or edit an existing one.")
+                            .with_help("Add a network to the list or edit an existing one.")
                             .with_parameter(Parameter::string("ssid"))
                             .with_parameter(Parameter::string("key")),
                     )
                     .with_command(
                         Command::new("remove", network_remove)
-                            .with_help("Remove an access point from the list.")
+                            .with_help("Remove a network from the list.")
                             .with_parameter(Parameter::string("ssid")),
                     ),
             )
@@ -43,12 +45,12 @@ impl<'a> Cli<'a> {
         Self { repl }
     }
 
-    pub fn run(&mut self) {
+    pub(crate) fn run(&mut self) {
         self.repl.run();
     }
 }
 
-fn version(ctrl: Option<&Controller>, _: Args) {
+fn version(_: Option<&Controller>, _: &Args) {
     let mut versions = vec![
         (
             env!("CARGO_PKG_NAME").to_owned(),
@@ -56,9 +58,10 @@ fn version(ctrl: Option<&Controller>, _: Args) {
         ),
         (smart_repl::NAME.to_owned(), smart_repl::VERSION.to_owned()),
     ];
-    if let Some(c) = ctrl {
-        versions.push((c.backend_name().to_owned(), c.backend_version().to_owned()));
-    }
+    versions.push((
+        Controller::backend_name().into(),
+        Controller::backend_version().to_owned(),
+    ));
     versions = versions.into_iter().map(|x| (x.0 + ":", x.1)).collect();
     let maxlen = versions
         .iter()
@@ -71,26 +74,25 @@ fn version(ctrl: Option<&Controller>, _: Args) {
     }
 }
 
-fn ap_auto(_ctrl: Option<&Controller>, args: Args) {
-    println!("** ap auto **");
+fn ap_auto(ctrl: Option<&Controller>, args: &Args) {
+    let ctrl = ctrl.unwrap();
     if let Some(val) = args.get_bool("value").unwrap() {
-        println!("set to {val}");
+        ctrl.set_access_point_mode(val);
+    } else if ctrl.get_access_point_mode() {
+        println!("on");
     } else {
-        println!("read");
+        println!("off");
     }
-    //if let Some(c) = ctrl {
-    //    c.set_access_point_mode(true);
-    //}
 }
 
-fn network_list(_: Option<&Controller>, _: Args) {
+fn network_list(_: Option<&Controller>, _: &Args) {
     println!("** network list **");
 }
 
-fn network_add(_: Option<&Controller>, _: Args) {
+fn network_add(_: Option<&Controller>, _: &Args) {
     println!("** network add **");
 }
 
-fn network_remove(_: Option<&Controller>, _: Args) {
+fn network_remove(_: Option<&Controller>, _: &Args) {
     println!("** network remove **");
 }
