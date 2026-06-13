@@ -1,10 +1,10 @@
-use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
-
-use control::Controller;
-use interface::Cli;
-
 mod control;
 mod interface;
+
+use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
+
+use self::control::Controller;
+use self::interface::Cli;
 
 fn main() {
     TermLogger::init(
@@ -13,6 +13,8 @@ fn main() {
             .add_filter_allow_str("audio_cli")
             .add_filter_allow_str("audio_backend")
             .add_filter_allow_str("smart_repl")
+            .add_filter_ignore_str("audio_backend::com::mdns")
+            .add_filter_ignore_str("audio_backend::com::websocket")
             .build(),
         TerminalMode::Stdout,
         ColorChoice::Auto,
