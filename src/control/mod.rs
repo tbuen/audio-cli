@@ -1,27 +1,34 @@
+use std::error;
 use std::fmt;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
 
-use backend::{Backend, Con, Event, Version};
+use backend::{Backend, Con, Event, Network, NotConnectedError, RemoteError, Version};
 use log::debug;
 
+#[derive(Debug)]
 pub(crate) enum Error {
     NotConnected,
+    Timeout,
+    Remote(RemoteError),
 }
 
 pub(crate) struct Controller {
     backend: Backend,
     handle: Option<JoinHandle<()>>,
     sender: Sender<Command>,
-    data: Arc<Mutex<Data>>,
+    shared: Arc<(Mutex<SharedData>, Condvar)>,
 }
 
 #[derive(Default)]
-struct Data {
+struct SharedData {
     status: Status,
+    error: Option<RemoteError>,
+    scan_result: Option<Result<Vec<Network>, RemoteError>>,
+    network_list: Option<Result<Vec<String>, RemoteError>>,
 }
 
 #[derive(Default, Clone)]
@@ -47,19 +54,19 @@ impl Controller {
     pub(crate) fn new() -> Self {
         let backend = Backend::new();
         let receiver = backend.receiver().unwrap();
-        let data = Arc::new(Mutex::new(Data::default()));
-        let d = Arc::clone(&data);
+        let shared = Arc::new((Mutex::new(SharedData::default()), Condvar::new()));
+        let shared_thread = shared.clone();
         let (sender, rx) = mpsc::channel();
         Self {
             backend,
             handle: Some(
                 Builder::new()
                     .name("control".into())
-                    .spawn(move || Self::thread(rx, receiver, d))
+                    .spawn(move || Self::thread(rx, receiver, shared_thread))
                     .unwrap(),
             ),
             sender,
-            data,
+            shared,
         }
     }
 
@@ -80,55 +87,77 @@ impl Controller {
     }
 
     pub(crate) fn get_con_status(&self) -> Status {
-        let data = self.data.lock().unwrap();
+        let (mutex, _) = &*self.shared;
+        let data = mutex.lock().unwrap();
         data.status.clone()
     }
 
-    pub(crate) fn get_wifi_scan_result(&self) -> Result<Vec<String>, Error> {
-        let data = self.data.lock().unwrap();
-        match data.status {
-            Status::Connected(_) => {
-                self.backend.get_wifi_scan_result();
-                Ok(Vec::new())
+    pub(crate) fn get_wifi_scan_result(&self) -> Result<Vec<Network>, Error> {
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        if let Err(NotConnectedError) = self.backend.get_wifi_scan_result() {
+            Err(Error::NotConnected)
+        } else {
+            let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
+            if result.timed_out() {
+                Err(Error::Timeout)
+            } else {
+                data.scan_result.take().unwrap().map_err(Error::Remote)
             }
-            Status::Disconnected => Err(Error::NotConnected),
         }
     }
 
     pub(crate) fn get_wifi_network_list(&self) -> Result<Vec<String>, Error> {
-        let data = self.data.lock().unwrap();
-        match data.status {
-            Status::Connected(_) => {
-                self.backend.get_wifi_network_list();
-                Ok(Vec::new())
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        if let Err(NotConnectedError) = self.backend.get_wifi_network_list() {
+            Err(Error::NotConnected)
+        } else {
+            let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
+            if result.timed_out() {
+                Err(Error::Timeout)
+            } else {
+                data.network_list.take().unwrap().map_err(Error::Remote)
             }
-            Status::Disconnected => Err(Error::NotConnected),
         }
     }
 
     pub(crate) fn set_wifi_network(&self, ssid: String, key: String) -> Result<(), Error> {
-        let data = self.data.lock().unwrap();
-        match data.status {
-            Status::Connected(_) => {
-                self.backend.set_wifi_network(ssid, key);
-                Ok(())
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        if let Err(NotConnectedError) = self.backend.set_wifi_network(ssid, key) {
+            Err(Error::NotConnected)
+        } else {
+            let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
+            if result.timed_out() {
+                Err(Error::Timeout)
+            } else {
+                data.error.take().map_or(Ok(()), |e| Err(Error::Remote(e)))
             }
-            Status::Disconnected => Err(Error::NotConnected),
         }
     }
 
     pub(crate) fn delete_wifi_network(&self, ssid: String) -> Result<(), Error> {
-        let data = self.data.lock().unwrap();
-        match data.status {
-            Status::Connected(_) => {
-                self.backend.delete_wifi_network(ssid);
-                Ok(())
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        if let Err(NotConnectedError) = self.backend.delete_wifi_network(ssid) {
+            Err(Error::NotConnected)
+        } else {
+            let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
+            if result.timed_out() {
+                Err(Error::Timeout)
+            } else {
+                data.error.take().map_or(Ok(()), |e| Err(Error::Remote(e)))
             }
-            Status::Disconnected => Err(Error::NotConnected),
         }
     }
 
-    fn thread(rx: Receiver<Command>, receiver: Receiver<Event>, data: Arc<Mutex<Data>>) {
+    fn thread(
+        rx: Receiver<Command>,
+        receiver: Receiver<Event>,
+        shared: Arc<(Mutex<SharedData>, Condvar)>,
+    ) {
+        let (mutex, cvar) = &*shared;
         loop {
             if let Ok(Command::Quit) = rx.try_recv() {
                 debug!("control thread received Quit");
@@ -138,21 +167,28 @@ impl Controller {
             if let Ok(event) = receiver.recv_timeout(Duration::from_millis(10)) {
                 match event {
                     Event::Connected(con, info) => {
-                        let mut data = data.lock().unwrap();
+                        let mut data = mutex.lock().unwrap();
                         data.status = Status::Connected((con, info));
                     }
                     Event::Disconnected => {
-                        let mut data = data.lock().unwrap();
+                        let mut data = mutex.lock().unwrap();
                         data.status = Status::Disconnected;
                     }
-                    Event::ScanResult(res) => match res {
-                        Ok(list) => println!("{list:?}"),
-                        Err(e) => println!("{e:?}"),
-                    },
-                    Event::NetworkList(res) => match res {
-                        Ok(list) => println!("{list:?}"),
-                        Err(e) => println!("{e:?}"),
-                    },
+                    Event::ScanResult(res) => {
+                        let mut data = mutex.lock().unwrap();
+                        data.scan_result = Some(res);
+                        cvar.notify_one();
+                    }
+                    Event::NetworkList(res) => {
+                        let mut data = mutex.lock().unwrap();
+                        data.network_list = Some(res);
+                        cvar.notify_one();
+                    }
+                    Event::SetNetwork(res) | Event::DeleteNetwork(res) => {
+                        let mut data = mutex.lock().unwrap();
+                        data.error = res.err();
+                        cvar.notify_one();
+                    }
                 }
             }
         }
@@ -168,10 +204,14 @@ impl Drop for Controller {
     }
 }
 
+impl error::Error for Error {}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            Self::NotConnected => write!(f, "Not connected."),
+            Self::NotConnected => write!(f, "Not connected"),
+            Self::Timeout => write!(f, "Timeout"),
+            Self::Remote(e) => write!(f, "Error: {} ({})", e.message, e.code),
         }
     }
 }

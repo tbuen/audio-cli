@@ -1,10 +1,11 @@
+#![allow(clippy::print_stdout)]
 mod control;
 mod interface;
 
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
-use self::control::Controller;
-use self::interface::Cli;
+use crate::control::Controller;
+use crate::interface::Cli;
 
 fn main() {
     TermLogger::init(

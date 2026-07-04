@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use std::cmp;
 
 use colored::Colorize as _;
@@ -128,10 +129,16 @@ fn network_scan(ctrl: Option<&Controller>, _: Args) {
     match result {
         Ok(list) => {
             for network in list {
-                println!("{network}");
+                //println!("{} {}", '\u{1f6dc}', network.ssid);
+                match network.rssi {
+                    3 => println!("\u{1f7e2} {}", network.ssid),
+                    2 => println!("\u{1f7e1} {}", network.ssid),
+                    1 => println!("\u{1f534} {}", network.ssid),
+                    _ => println!("? {}", network.ssid),
+                }
             }
         }
-        Err(e) => println!("{}", e.to_string().red()),
+        Err(e) => println!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -144,7 +151,7 @@ fn network_list(ctrl: Option<&Controller>, _: Args) {
                 println!("{network}");
             }
         }
-        Err(e) => println!("{}", e.to_string().red()),
+        Err(e) => println!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -155,7 +162,7 @@ fn network_add(ctrl: Option<&Controller>, mut args: Args) {
     let result = ctrl.set_wifi_network(ssid, key);
     match result {
         Ok(()) => {}
-        Err(e) => println!("{}", e.to_string().red()),
+        Err(e) => println!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -165,6 +172,6 @@ fn network_remove(ctrl: Option<&Controller>, mut args: Args) {
     let result = ctrl.delete_wifi_network(ssid);
     match result {
         Ok(()) => {}
-        Err(e) => println!("{}", e.to_string().red()),
+        Err(e) => println!("{}", e.to_string().red().bold()),
     }
 }
