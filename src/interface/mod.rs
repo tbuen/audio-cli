@@ -17,6 +17,7 @@ impl<'a> Cli<'a> {
             .with_prompt(">> ")
             .with_help()
             .with_command(Command::new("version", version).with_help("Show version information."))
+            .with_command(Command::new("status", con_status).with_help("Show connection status."))
             .with_group(
                 Group::new("ap")
                     .with_help("Handle connection to the device's access point.")
@@ -27,14 +28,14 @@ impl<'a> Cli<'a> {
                     ),
             )
             .with_group(
-                Group::new("con")
-                    .with_help("Handle connection to the device.")
+                Group::new("info")
+                    .with_help("Show device information.")
                     .with_command(
-                        Command::new("status", con_status).with_help("Show connection status."),
+                        Command::new("version", info_version)
+                            .with_help("Show version information."),
                     )
                     .with_command(
-                        Command::new("version", con_version)
-                            .with_help("Show device version information."),
+                        Command::new("memory", info_memory).with_help("Show memory information."),
                     ),
             )
             .with_group(
@@ -113,13 +114,31 @@ fn con_status(ctrl: Option<&Controller>, _: Args) {
     }
 }
 
-fn con_version(ctrl: Option<&Controller>, _: Args) {
+fn info_version(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
     let status = ctrl.get_con_status();
     if let Status::Connected((_, version)) = status {
         println!("Project:   {}", version.project);
         println!("Version:   {}", version.version);
         println!("ESP-IDF:   {}", version.esp_idf);
+    }
+}
+
+fn info_memory(ctrl: Option<&Controller>, _: Args) {
+    let ctrl = ctrl.unwrap();
+    let result = ctrl.get_info_memory();
+    match result {
+        Ok(info) => {
+            println!("heap");
+            println!(
+                "   total:        {:3} KiB",
+                info.heap.allocated / 1024 + info.heap.free / 1024
+            );
+            println!("   allocated:    {:3} KiB", info.heap.allocated / 1024);
+            println!("   free:         {:3} KiB", info.heap.free / 1024);
+            println!("   minimum free: {:3} KiB", info.heap.minimum_free / 1024);
+        }
+        Err(e) => println!("{}", e.to_string().red().bold()),
     }
 }
 

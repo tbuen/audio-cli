@@ -6,7 +6,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
 
-use backend::{Backend, Con, Event, Network, NotConnectedError, RemoteError, Version};
+use backend::{Backend, Con, Event, Memory, Network, NotConnectedError, RemoteError, Version};
 use log::debug;
 
 #[derive(Debug)]
@@ -27,6 +27,7 @@ pub(crate) struct Controller {
 struct SharedData {
     status: Status,
     error: Option<RemoteError>,
+    info_memory: Option<Result<Memory, RemoteError>>,
     scan_result: Option<Result<Vec<Network>, RemoteError>>,
     network_list: Option<Result<Vec<String>, RemoteError>>,
 }
@@ -90,6 +91,21 @@ impl Controller {
         let (mutex, _) = &*self.shared;
         let data = mutex.lock().unwrap();
         data.status.clone()
+    }
+
+    pub(crate) fn get_info_memory(&self) -> Result<Memory, Error> {
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        if let Err(NotConnectedError) = self.backend.get_info_memory() {
+            Err(Error::NotConnected)
+        } else {
+            let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
+            if result.timed_out() {
+                Err(Error::Timeout)
+            } else {
+                data.info_memory.take().unwrap().map_err(Error::Remote)
+            }
+        }
     }
 
     pub(crate) fn get_wifi_scan_result(&self) -> Result<Vec<Network>, Error> {
@@ -173,6 +189,11 @@ impl Controller {
                     Event::Disconnected => {
                         let mut data = mutex.lock().unwrap();
                         data.status = Status::Disconnected;
+                    }
+                    Event::InfoMemory(res) => {
+                        let mut data = mutex.lock().unwrap();
+                        data.info_memory = Some(res);
+                        cvar.notify_one();
                     }
                     Event::ScanResult(res) => {
                         let mut data = mutex.lock().unwrap();
