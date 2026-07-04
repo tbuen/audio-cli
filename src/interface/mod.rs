@@ -4,7 +4,7 @@ use std::cmp;
 use colored::Colorize as _;
 use smart_repl::{Args, Command, Group, Parameter, Repl};
 
-use crate::control::{Controller, Status};
+use crate::control::Controller;
 
 pub(crate) struct Cli<'a> {
     repl: Repl<'a, Controller>,
@@ -17,7 +17,9 @@ impl<'a> Cli<'a> {
             .with_prompt(">> ")
             .with_help()
             .with_command(Command::new("version", version).with_help("Show version information."))
-            .with_command(Command::new("status", con_status).with_help("Show connection status."))
+            .with_command(
+                Command::new("connection", connection).with_help("Show connection status."),
+            )
             .with_group(
                 Group::new("ap")
                     .with_help("Handle connection to the device's access point.")
@@ -31,11 +33,16 @@ impl<'a> Cli<'a> {
                 Group::new("info")
                     .with_help("Show device information.")
                     .with_command(
-                        Command::new("version", info_version)
-                            .with_help("Show version information."),
+                        Command::new("about", info_about)
+                            .with_help("Show device version information."),
                     )
                     .with_command(
-                        Command::new("memory", info_memory).with_help("Show memory information."),
+                        Command::new("memory", info_memory)
+                            .with_help("Show device memory information."),
+                    )
+                    .with_command(
+                        Command::new("flash", info_flash)
+                            .with_help("Show device flash information."),
                     ),
             )
             .with_group(
@@ -103,24 +110,27 @@ fn ap_auto(ctrl: Option<&Controller>, args: Args) {
     }
 }
 
-fn con_status(ctrl: Option<&Controller>, _: Args) {
+fn connection(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
-    let status = ctrl.get_con_status();
-    if let Status::Connected((con, _)) = status {
-        println!("Connected: true");
-        println!("Mode:      {}", con.mode);
-    } else {
-        println!("Connected: false");
+    let result = ctrl.get_info_connection();
+    match result {
+        Ok(info) => {
+            println!("Mode: {}", info.mode);
+        }
+        Err(e) => println!("{}", e.to_string().red().bold()),
     }
 }
 
-fn info_version(ctrl: Option<&Controller>, _: Args) {
+fn info_about(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
-    let status = ctrl.get_con_status();
-    if let Status::Connected((_, version)) = status {
-        println!("Project:   {}", version.project);
-        println!("Version:   {}", version.version);
-        println!("ESP-IDF:   {}", version.esp_idf);
+    let result = ctrl.get_info_about();
+    match result {
+        Ok(info) => {
+            println!("Project:   {}", info.project);
+            println!("Version:   {}", info.version);
+            println!("ESP-IDF:   {}", info.esp_idf);
+        }
+        Err(e) => println!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -137,6 +147,23 @@ fn info_memory(ctrl: Option<&Controller>, _: Args) {
             println!("   allocated:    {:3} KiB", info.heap.allocated / 1024);
             println!("   free:         {:3} KiB", info.heap.free / 1024);
             println!("   minimum free: {:3} KiB", info.heap.minimum_free / 1024);
+        }
+        Err(e) => println!("{}", e.to_string().red().bold()),
+    }
+}
+
+fn info_flash(ctrl: Option<&Controller>, _: Args) {
+    let ctrl = ctrl.unwrap();
+    let result = ctrl.get_info_spiflash();
+    match result {
+        Ok(info) => {
+            //let max = info.files.iter().fold(0, |m, f| cmp::max(m, f.name.len()));
+            println!("files");
+            for f in info.files {
+                println!("   {} {:6} {}", f.md5, f.size, f.name);
+            }
+            println!("total: {:3} KiB", info.total / 1024);
+            println!("free:  {:3} KiB", info.free / 1024);
         }
         Err(e) => println!("{}", e.to_string().red().bold()),
     }

@@ -6,7 +6,9 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
 
-use backend::{Backend, Con, Event, Memory, Network, NotConnectedError, RemoteError, Version};
+use backend::{
+    About, Backend, Connection, Event, Memory, Network, NotConnectedError, RemoteError, SPIFlash,
+};
 use log::debug;
 
 #[derive(Debug)]
@@ -25,27 +27,14 @@ pub(crate) struct Controller {
 
 #[derive(Default)]
 struct SharedData {
-    status: Status,
     error: Option<RemoteError>,
+    info_connection: Option<Result<Connection, RemoteError>>,
+    info_about: Option<Result<About, RemoteError>>,
     info_memory: Option<Result<Memory, RemoteError>>,
+    info_spiflash: Option<Result<SPIFlash, RemoteError>>,
     scan_result: Option<Result<Vec<Network>, RemoteError>>,
     network_list: Option<Result<Vec<String>, RemoteError>>,
 }
-
-#[derive(Default, Clone)]
-pub(crate) enum Status {
-    #[default]
-    Disconnected,
-    Connected((Con, Version)),
-}
-
-//#[derive(Default, Clone)]
-//pub(crate) struct Info {
-//    mode: String,
-//    project: String,
-//    version: String,
-//    esp_idf: String,
-//}
 
 enum Command {
     Quit,
@@ -87,10 +76,34 @@ impl Controller {
         self.backend.set_access_point_mode(auto);
     }
 
-    pub(crate) fn get_con_status(&self) -> Status {
-        let (mutex, _) = &*self.shared;
+    pub(crate) fn get_info_connection(&self) -> Result<Connection, Error> {
+        let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
-        data.status.clone()
+        if let Err(NotConnectedError) = self.backend.get_info_connection() {
+            Err(Error::NotConnected)
+        } else {
+            let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
+            if result.timed_out() {
+                Err(Error::Timeout)
+            } else {
+                data.info_connection.take().unwrap().map_err(Error::Remote)
+            }
+        }
+    }
+
+    pub(crate) fn get_info_about(&self) -> Result<About, Error> {
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        if let Err(NotConnectedError) = self.backend.get_info_about() {
+            Err(Error::NotConnected)
+        } else {
+            let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
+            if result.timed_out() {
+                Err(Error::Timeout)
+            } else {
+                data.info_about.take().unwrap().map_err(Error::Remote)
+            }
+        }
     }
 
     pub(crate) fn get_info_memory(&self) -> Result<Memory, Error> {
@@ -108,6 +121,20 @@ impl Controller {
         }
     }
 
+    pub(crate) fn get_info_spiflash(&self) -> Result<SPIFlash, Error> {
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        if let Err(NotConnectedError) = self.backend.get_info_spiflash() {
+            Err(Error::NotConnected)
+        } else {
+            let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
+            if result.timed_out() {
+                Err(Error::Timeout)
+            } else {
+                data.info_spiflash.take().unwrap().map_err(Error::Remote)
+            }
+        }
+    }
     pub(crate) fn get_wifi_scan_result(&self) -> Result<Vec<Network>, Error> {
         let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
@@ -182,17 +209,26 @@ impl Controller {
 
             if let Ok(event) = receiver.recv_timeout(Duration::from_millis(10)) {
                 match event {
-                    Event::Connected(con, info) => {
+                    Event::Connected => {}
+                    Event::Disconnected => {}
+                    Event::InfoConnection(res) => {
                         let mut data = mutex.lock().unwrap();
-                        data.status = Status::Connected((con, info));
+                        data.info_connection = Some(res);
+                        cvar.notify_one();
                     }
-                    Event::Disconnected => {
+                    Event::InfoAbout(res) => {
                         let mut data = mutex.lock().unwrap();
-                        data.status = Status::Disconnected;
+                        data.info_about = Some(res);
+                        cvar.notify_one();
                     }
                     Event::InfoMemory(res) => {
                         let mut data = mutex.lock().unwrap();
                         data.info_memory = Some(res);
+                        cvar.notify_one();
+                    }
+                    Event::InfoSPIFlash(res) => {
+                        let mut data = mutex.lock().unwrap();
+                        data.info_spiflash = Some(res);
                         cvar.notify_one();
                     }
                     Event::ScanResult(res) => {
@@ -230,9 +266,9 @@ impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            Self::NotConnected => write!(f, "Not connected"),
-            Self::Timeout => write!(f, "Timeout"),
-            Self::Remote(e) => write!(f, "Error: {} ({})", e.message, e.code),
+            Self::NotConnected => write!(f, "Not connected."),
+            Self::Timeout => write!(f, "Timeout."),
+            Self::Remote(e) => write!(f, "Error: {} [{}].", e.message, e.code),
         }
     }
 }
