@@ -7,13 +7,14 @@ use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
 
 use backend::{
-    About, Backend, Connection, Event, Memory, Network, NotConnectedError, RemoteError, SPIFlash,
+    About, Backend, Connection, Event, Memory, Network, RemoteError, SPIFlash, SyncStatus,
 };
-use log::debug;
+use log::{debug, info};
 
 #[derive(Debug)]
 pub(crate) enum Error {
     NotConnected,
+    AlreadyRunning,
     Timeout,
     Remote(RemoteError),
 }
@@ -79,7 +80,7 @@ impl Controller {
     pub(crate) fn get_info_connection(&self) -> Result<Connection, Error> {
         let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
-        if let Err(NotConnectedError) = self.backend.get_info_connection() {
+        if let Err(backend::Error::NotConnected) = self.backend.get_info_connection() {
             Err(Error::NotConnected)
         } else {
             let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
@@ -94,7 +95,7 @@ impl Controller {
     pub(crate) fn get_info_about(&self) -> Result<About, Error> {
         let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
-        if let Err(NotConnectedError) = self.backend.get_info_about() {
+        if let Err(backend::Error::NotConnected) = self.backend.get_info_about() {
             Err(Error::NotConnected)
         } else {
             let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
@@ -109,7 +110,7 @@ impl Controller {
     pub(crate) fn get_info_memory(&self) -> Result<Memory, Error> {
         let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
-        if let Err(NotConnectedError) = self.backend.get_info_memory() {
+        if let Err(backend::Error::NotConnected) = self.backend.get_info_memory() {
             Err(Error::NotConnected)
         } else {
             let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
@@ -124,7 +125,7 @@ impl Controller {
     pub(crate) fn get_info_spiflash(&self) -> Result<SPIFlash, Error> {
         let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
-        if let Err(NotConnectedError) = self.backend.get_info_spiflash() {
+        if let Err(backend::Error::NotConnected) = self.backend.get_info_spiflash() {
             Err(Error::NotConnected)
         } else {
             let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
@@ -135,10 +136,11 @@ impl Controller {
             }
         }
     }
+
     pub(crate) fn get_wifi_scan_result(&self) -> Result<Vec<Network>, Error> {
         let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
-        if let Err(NotConnectedError) = self.backend.get_wifi_scan_result() {
+        if let Err(backend::Error::NotConnected) = self.backend.get_wifi_scan_result() {
             Err(Error::NotConnected)
         } else {
             let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
@@ -153,7 +155,7 @@ impl Controller {
     pub(crate) fn get_wifi_network_list(&self) -> Result<Vec<String>, Error> {
         let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
-        if let Err(NotConnectedError) = self.backend.get_wifi_network_list() {
+        if let Err(backend::Error::NotConnected) = self.backend.get_wifi_network_list() {
             Err(Error::NotConnected)
         } else {
             let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
@@ -168,7 +170,7 @@ impl Controller {
     pub(crate) fn set_wifi_network(&self, ssid: String, key: String) -> Result<(), Error> {
         let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
-        if let Err(NotConnectedError) = self.backend.set_wifi_network(ssid, key) {
+        if let Err(backend::Error::NotConnected) = self.backend.set_wifi_network(ssid, key) {
             Err(Error::NotConnected)
         } else {
             let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
@@ -183,7 +185,7 @@ impl Controller {
     pub(crate) fn delete_wifi_network(&self, ssid: String) -> Result<(), Error> {
         let (mutex, cvar) = &*self.shared;
         let data = mutex.lock().unwrap();
-        if let Err(NotConnectedError) = self.backend.delete_wifi_network(ssid) {
+        if let Err(backend::Error::NotConnected) = self.backend.delete_wifi_network(ssid) {
             Err(Error::NotConnected)
         } else {
             let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
@@ -193,6 +195,18 @@ impl Controller {
                 data.error.take().map_or(Ok(()), |e| Err(Error::Remote(e)))
             }
         }
+    }
+
+    pub(crate) fn sync_files_start(&self) -> Result<(), Error> {
+        match self.backend.sync_files_start() {
+            Err(backend::Error::NotConnected) => Err(Error::NotConnected),
+            Err(backend::Error::AlreadyRunning) => Err(Error::AlreadyRunning),
+            Ok(()) => Ok(()),
+        }
+    }
+
+    pub(crate) fn sync_files_status(&self) -> SyncStatus {
+        self.backend.sync_files_status()
     }
 
     fn thread(
@@ -209,8 +223,8 @@ impl Controller {
 
             if let Ok(event) = receiver.recv_timeout(Duration::from_millis(10)) {
                 match event {
-                    Event::Connected => {}
-                    Event::Disconnected => {}
+                    Event::Connected => info!("Connected"),
+                    Event::Disconnected => info!("Disconnected"),
                     Event::InfoConnection(res) => {
                         let mut data = mutex.lock().unwrap();
                         data.info_connection = Some(res);
@@ -246,6 +260,7 @@ impl Controller {
                         data.error = res.err();
                         cvar.notify_one();
                     }
+                    Event::FileSyncStatus => info!("sync status changed"),
                 }
             }
         }
@@ -267,6 +282,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             Self::NotConnected => write!(f, "Not connected."),
+            Self::AlreadyRunning => write!(f, "Already running."),
             Self::Timeout => write!(f, "Timeout."),
             Self::Remote(e) => write!(f, "Error: {} [{}].", e.message, e.code),
         }

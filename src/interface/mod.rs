@@ -68,6 +68,22 @@ impl<'a> Cli<'a> {
                             .with_parameter(Parameter::string("ssid")),
                     ),
             )
+            .with_group(
+                Group::new("sync")
+                    .with_help("Sync data from device.")
+                    .with_group(
+                        Group::new("files")
+                            .with_help("Sync file list")
+                            .with_command(
+                                Command::new("start", sync_files_start)
+                                    .with_help("Start file list sync."),
+                            )
+                            .with_command(
+                                Command::new("status", sync_files_status)
+                                    .with_help("Get status of file list sync."),
+                            ),
+                    ),
+            )
             .build();
 
         Self { repl }
@@ -220,4 +236,19 @@ fn network_remove(ctrl: Option<&Controller>, mut args: Args) {
         Ok(()) => {}
         Err(e) => println!("{}", e.to_string().red().bold()),
     }
+}
+
+fn sync_files_start(ctrl: Option<&Controller>, _: Args) {
+    let ctrl = ctrl.unwrap();
+    let result = ctrl.sync_files_start();
+    match result {
+        Ok(()) => {}
+        Err(e) => println!("{}", e.to_string().red().bold()),
+    }
+}
+
+fn sync_files_status(ctrl: Option<&Controller>, _: Args) {
+    let ctrl = ctrl.unwrap();
+    let status = ctrl.sync_files_status();
+    println!("{status}");
 }
