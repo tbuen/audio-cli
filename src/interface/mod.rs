@@ -71,18 +71,7 @@ impl<'a> Cli<'a> {
             .with_group(
                 Group::new("sync")
                     .with_help("Sync data from device.")
-                    .with_group(
-                        Group::new("files")
-                            .with_help("Sync file list")
-                            .with_command(
-                                Command::new("start", sync_files_start)
-                                    .with_help("Start file list sync."),
-                            )
-                            .with_command(
-                                Command::new("status", sync_files_status)
-                                    .with_help("Get status of file list sync."),
-                            ),
-                    ),
+                    .with_command(Command::new("files", sync_files).with_help("Sync file list.")),
             )
             .build();
 
@@ -238,17 +227,11 @@ fn network_remove(ctrl: Option<&Controller>, mut args: Args) {
     }
 }
 
-fn sync_files_start(ctrl: Option<&Controller>, _: Args) {
+fn sync_files(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
-    let result = ctrl.sync_files_start();
+    let result = ctrl.sync_files();
     match result {
-        Ok(()) => {}
+        Ok(v) => println!("{v}"),
         Err(e) => println!("{}", e.to_string().red().bold()),
     }
-}
-
-fn sync_files_status(ctrl: Option<&Controller>, _: Args) {
-    let ctrl = ctrl.unwrap();
-    let status = ctrl.sync_files_status();
-    println!("{status}");
 }

@@ -9,7 +9,7 @@ use crate::interface::Cli;
 
 fn main() {
     TermLogger::init(
-        LevelFilter::Debug,
+        LevelFilter::Info,
         ConfigBuilder::new()
             .add_filter_allow_str("audio_cli")
             .add_filter_allow_str("audio_backend")

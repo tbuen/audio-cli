@@ -6,9 +6,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
 
-use backend::{
-    About, Backend, Connection, Event, FileSyncStatus, Memory, Network, RemoteError, SPIFlash,
-};
+use backend::SyncStatus;
+use backend::{About, Backend, Connection, Event, Memory, Network, RemoteError, SPIFlash};
 use log::{debug, info};
 
 #[derive(Debug)]
@@ -16,7 +15,7 @@ pub(crate) enum Error {
     NotConnected,
     AlreadyRunning,
     Timeout,
-    Remote(RemoteError),
+    Remote,
 }
 
 pub(crate) struct Controller {
@@ -35,7 +34,7 @@ struct SharedData {
     info_spiflash: Option<Result<SPIFlash, RemoteError>>,
     scan_result: Option<Result<Vec<Network>, RemoteError>>,
     network_list: Option<Result<Vec<String>, RemoteError>>,
-    file_sync_status: FileSyncStatus,
+    file_sync: Option<bool>,
 }
 
 enum Command {
@@ -88,7 +87,10 @@ impl Controller {
             if result.timed_out() {
                 Err(Error::Timeout)
             } else {
-                data.info_connection.take().unwrap().map_err(Error::Remote)
+                data.info_connection
+                    .take()
+                    .unwrap()
+                    .map_err(|_| Error::Remote)
             }
         }
     }
@@ -103,7 +105,7 @@ impl Controller {
             if result.timed_out() {
                 Err(Error::Timeout)
             } else {
-                data.info_about.take().unwrap().map_err(Error::Remote)
+                data.info_about.take().unwrap().map_err(|_| Error::Remote)
             }
         }
     }
@@ -118,7 +120,7 @@ impl Controller {
             if result.timed_out() {
                 Err(Error::Timeout)
             } else {
-                data.info_memory.take().unwrap().map_err(Error::Remote)
+                data.info_memory.take().unwrap().map_err(|_| Error::Remote)
             }
         }
     }
@@ -133,7 +135,10 @@ impl Controller {
             if result.timed_out() {
                 Err(Error::Timeout)
             } else {
-                data.info_spiflash.take().unwrap().map_err(Error::Remote)
+                data.info_spiflash
+                    .take()
+                    .unwrap()
+                    .map_err(|_| Error::Remote)
             }
         }
     }
@@ -148,7 +153,7 @@ impl Controller {
             if result.timed_out() {
                 Err(Error::Timeout)
             } else {
-                data.scan_result.take().unwrap().map_err(Error::Remote)
+                data.scan_result.take().unwrap().map_err(|_| Error::Remote)
             }
         }
     }
@@ -163,7 +168,7 @@ impl Controller {
             if result.timed_out() {
                 Err(Error::Timeout)
             } else {
-                data.network_list.take().unwrap().map_err(Error::Remote)
+                data.network_list.take().unwrap().map_err(|_| Error::Remote)
             }
         }
     }
@@ -178,7 +183,7 @@ impl Controller {
             if result.timed_out() {
                 Err(Error::Timeout)
             } else {
-                data.error.take().map_or(Ok(()), |e| Err(Error::Remote(e)))
+                data.error.take().map_or(Ok(()), |_| Err(Error::Remote))
             }
         }
     }
@@ -193,23 +198,26 @@ impl Controller {
             if result.timed_out() {
                 Err(Error::Timeout)
             } else {
-                data.error.take().map_or(Ok(()), |e| Err(Error::Remote(e)))
+                data.error.take().map_or(Ok(()), |_| Err(Error::Remote))
             }
         }
     }
 
-    pub(crate) fn sync_files_start(&self) -> Result<(), Error> {
-        match self.backend.sync_files_start() {
+    pub(crate) fn sync_files(&self) -> Result<bool, Error> {
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        match self.backend.sync_files() {
             Err(backend::Error::NotConnected) => Err(Error::NotConnected),
             Err(backend::Error::AlreadyRunning) => Err(Error::AlreadyRunning),
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(10)).unwrap();
+                if result.timed_out() {
+                    Err(Error::Timeout)
+                } else {
+                    Ok(data.file_sync.take().unwrap())
+                }
+            }
         }
-    }
-
-    pub(crate) fn sync_files_status(&self) -> FileSyncStatus {
-        let (mutex, _) = &*self.shared;
-        let data = mutex.lock().unwrap();
-        data.file_sync_status.clone() // TODO clone evtl. hier weg, kann Copy werden, wenn der RemoteError rausfällt??
     }
 
     fn thread(
@@ -263,10 +271,21 @@ impl Controller {
                         data.error = res.err();
                         cvar.notify_one();
                     }
-                    Event::FileSyncStatus(status) => {
+                    Event::FileSync(status) => {
                         let mut data = mutex.lock().unwrap();
-                        info!("sync status changed: {}", status.clone()); // TODO evtl. kann clone hier weg, wenn RemoteError rausfällt...
-                        data.file_sync_status = status;
+                        match status {
+                            SyncStatus::Idle => {
+                                info!("IDLE");
+                                data.file_sync = Some(false);
+                                cvar.notify_one();
+                            }
+                            SyncStatus::Running => info!("RUNNING"),
+                            SyncStatus::Completed => {
+                                info!("COMPLETED");
+                                data.file_sync = Some(true);
+                                cvar.notify_one();
+                            }
+                        }
                     }
                 }
             }
@@ -288,10 +307,10 @@ impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            Self::NotConnected => write!(f, "Not connected."),
-            Self::AlreadyRunning => write!(f, "Already running."),
-            Self::Timeout => write!(f, "Timeout."),
-            Self::Remote(e) => write!(f, "Error: {} [{}].", e.message, e.code),
+            Self::NotConnected => write!(f, "Not connected"),
+            Self::AlreadyRunning => write!(f, "Already running"),
+            Self::Timeout => write!(f, "Timeout"),
+            Self::Remote => write!(f, "Error"),
         }
     }
 }
