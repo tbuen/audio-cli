@@ -7,7 +7,7 @@ use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
 
 use backend::{
-    About, Backend, Connection, Event, Memory, Network, RemoteError, SPIFlash, SyncStatus,
+    About, Backend, Connection, Event, FileSyncStatus, Memory, Network, RemoteError, SPIFlash,
 };
 use log::{debug, info};
 
@@ -35,6 +35,7 @@ struct SharedData {
     info_spiflash: Option<Result<SPIFlash, RemoteError>>,
     scan_result: Option<Result<Vec<Network>, RemoteError>>,
     network_list: Option<Result<Vec<String>, RemoteError>>,
+    file_sync_status: FileSyncStatus,
 }
 
 enum Command {
@@ -205,8 +206,10 @@ impl Controller {
         }
     }
 
-    pub(crate) fn sync_files_status(&self) -> SyncStatus {
-        self.backend.sync_files_status()
+    pub(crate) fn sync_files_status(&self) -> FileSyncStatus {
+        let (mutex, _) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        data.file_sync_status.clone() // TODO clone evtl. hier weg, kann Copy werden, wenn der RemoteError rausfällt??
     }
 
     fn thread(
@@ -260,7 +263,11 @@ impl Controller {
                         data.error = res.err();
                         cvar.notify_one();
                     }
-                    Event::FileSyncStatus => info!("sync status changed"),
+                    Event::FileSyncStatus(status) => {
+                        let mut data = mutex.lock().unwrap();
+                        info!("sync status changed: {}", status.clone()); // TODO evtl. kann clone hier weg, wenn RemoteError rausfällt...
+                        data.file_sync_status = status;
+                    }
                 }
             }
         }
