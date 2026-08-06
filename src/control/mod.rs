@@ -16,6 +16,8 @@ pub(crate) enum Error {
     AlreadyRunning,
     Timeout,
     Remote,
+    NotSynced,
+    NotFound,
 }
 
 pub(crate) struct Controller {
@@ -220,6 +222,21 @@ impl Controller {
         }
     }
 
+    pub(crate) fn fs_pwd(&self) -> Result<String, Error> {
+        let fs = self.backend.filesystem();
+        fs.lock().unwrap().pwd().map_err(|_| Error::NotSynced)
+    }
+
+    pub(crate) fn fs_cd(&self, dir: &str) -> Result<(), Error> {
+        let fs = self.backend.filesystem();
+        fs.lock().unwrap().cd(dir).map_err(|_| Error::NotFound) // NotSynced also possible
+    }
+
+    pub(crate) fn fs_ls(&self) -> Result<(Vec<String>, Vec<String>), Error> {
+        let fs = self.backend.filesystem();
+        fs.lock().unwrap().ls().map_err(|_| Error::NotSynced)
+    }
+
     fn thread(
         rx: Receiver<Command>,
         receiver: Receiver<Event>,
@@ -311,6 +328,8 @@ impl fmt::Display for Error {
             Self::AlreadyRunning => write!(f, "Already running"),
             Self::Timeout => write!(f, "Timeout"),
             Self::Remote => write!(f, "Error"),
+            Self::NotSynced => write!(f, "Not synchronized"),
+            Self::NotFound => write!(f, "Not found"),
         }
     }
 }

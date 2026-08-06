@@ -73,6 +73,17 @@ impl<'a> Cli<'a> {
                     .with_help("Sync data from device.")
                     .with_command(Command::new("files", sync_files).with_help("Sync file list.")),
             )
+            .with_group(
+                Group::new("fs")
+                    .with_help("Access file system.")
+                    .with_command(Command::new("pwd", fs_pwd).with_help("Print current directory."))
+                    .with_command(
+                        Command::new("cd", fs_cd)
+                            .with_help("Change directory.")
+                            .with_parameter(Parameter::string("dir")),
+                    )
+                    .with_command(Command::new("ls", fs_ls).with_help("Print directory content.")),
+            )
             .build();
 
         Self { repl }
@@ -232,6 +243,41 @@ fn sync_files(ctrl: Option<&Controller>, _: Args) {
     let result = ctrl.sync_files();
     match result {
         Ok(v) => println!("{v}"),
+        Err(e) => println!("{}", e.to_string().red().bold()),
+    }
+}
+
+fn fs_pwd(ctrl: Option<&Controller>, _: Args) {
+    let ctrl = ctrl.unwrap();
+    let result = ctrl.fs_pwd();
+    match result {
+        Ok(v) => println!("{v}"),
+        Err(e) => println!("{}", e.to_string().red().bold()),
+    }
+}
+
+fn fs_cd(ctrl: Option<&Controller>, mut args: Args) {
+    let ctrl = ctrl.unwrap();
+    let dir = args.get_string("dir").unwrap().unwrap();
+    let result = ctrl.fs_cd(&dir);
+    match result {
+        Ok(()) => {}
+        Err(e) => println!("{}", e.to_string().red().bold()),
+    }
+}
+
+fn fs_ls(ctrl: Option<&Controller>, _: Args) {
+    let ctrl = ctrl.unwrap();
+    let result = ctrl.fs_ls();
+    match result {
+        Ok((d, f)) => {
+            for e in d {
+                println!("<{e}>");
+            }
+            for e in f {
+                println!("{e}");
+            }
+        }
         Err(e) => println!("{}", e.to_string().red().bold()),
     }
 }
