@@ -6,8 +6,10 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
 
-use backend::SyncStatus;
-use backend::{About, Backend, Connection, Event, Memory, Network, RemoteError, SPIFlash};
+use backend::{
+    About, Backend, Connection, Dir, Event, FsError, Memory, Network, RemoteError, SPIFlash,
+    SyncStatus,
+};
 use log::{debug, info};
 
 #[derive(Debug)]
@@ -229,7 +231,19 @@ impl Controller {
 
     pub(crate) fn fs_cd(&self, dir: &str) -> Result<(), Error> {
         let fs = self.backend.filesystem();
-        fs.lock().unwrap().cd(dir).map_err(|_| Error::NotFound) // NotSynced also possible
+        let d = {
+            if dir == "/" {
+                Dir::Root
+            } else if dir == ".." {
+                Dir::Up
+            } else {
+                Dir::Down(dir)
+            }
+        };
+        fs.lock().unwrap().cd(d).map_err(|e| match e {
+            FsError::NotSynced => Error::NotSynced,
+            FsError::NotFound => Error::NotFound,
+        })
     }
 
     pub(crate) fn fs_ls(&self) -> Result<(Vec<String>, Vec<String>), Error> {
