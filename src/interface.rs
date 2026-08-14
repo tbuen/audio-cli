@@ -133,7 +133,7 @@ fn connection(ctrl: Option<&Controller>, _: Args) {
         Ok(info) => {
             println!("Mode: {}", info.mode);
         }
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
@@ -146,7 +146,7 @@ fn info_about(ctrl: Option<&Controller>, _: Args) {
             println!("Version:   {}", info.version);
             println!("ESP-IDF:   {}", info.esp_idf);
         }
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
@@ -164,7 +164,7 @@ fn info_memory(ctrl: Option<&Controller>, _: Args) {
             println!("   free:         {:3} KiB", info.heap.free / 1024);
             println!("   minimum free: {:3} KiB", info.heap.minimum_free / 1024);
         }
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
@@ -173,7 +173,6 @@ fn info_flash(ctrl: Option<&Controller>, _: Args) {
     let result = ctrl.get_info_spiflash();
     match result {
         Ok(info) => {
-            //let max = info.files.iter().fold(0, |m, f| cmp::max(m, f.name.len()));
             println!("files");
             for f in info.files {
                 println!("   {} {:6} {}", f.md5, f.size, f.name);
@@ -181,7 +180,7 @@ fn info_flash(ctrl: Option<&Controller>, _: Args) {
             println!("total: {:3} KiB", info.total / 1024);
             println!("free:  {:3} KiB", info.free / 1024);
         }
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
@@ -200,7 +199,7 @@ fn network_scan(ctrl: Option<&Controller>, _: Args) {
                 }
             }
         }
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
@@ -213,7 +212,7 @@ fn network_list(ctrl: Option<&Controller>, _: Args) {
                 println!("{network}");
             }
         }
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
@@ -224,7 +223,7 @@ fn network_add(ctrl: Option<&Controller>, mut args: Args) {
     let result = ctrl.set_wifi_network(ssid, key);
     match result {
         Ok(()) => {}
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
@@ -234,7 +233,7 @@ fn network_remove(ctrl: Option<&Controller>, mut args: Args) {
     let result = ctrl.delete_wifi_network(ssid);
     match result {
         Ok(()) => {}
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
@@ -242,42 +241,42 @@ fn sync_files(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
     let result = ctrl.sync_files();
     match result {
-        Ok(v) => println!("{v}"),
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Ok(()) => {}
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
 fn fs_pwd(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
-    let result = ctrl.fs_pwd();
+    let result = ctrl.current_directory();
     match result {
         Ok(v) => println!("{v}"),
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
 fn fs_cd(ctrl: Option<&Controller>, mut args: Args) {
     let ctrl = ctrl.unwrap();
     let dir = args.get_string("dir").unwrap().unwrap();
-    let result = ctrl.fs_cd(&dir);
+    let result = ctrl.change_directory(&dir);
     match result {
         Ok(()) => {}
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
 fn fs_ls(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
-    let result = ctrl.fs_ls();
+    let result = ctrl.directory_content();
     match result {
-        Ok((d, f)) => {
-            for e in d {
+        Ok(content) => {
+            for e in content.dirs {
                 println!("<{e}>");
             }
-            for e in f {
+            for e in content.files {
                 println!("{e}");
             }
         }
-        Err(e) => println!("{}", e.to_string().red().bold()),
+        Err(e) => println!("{}", e.to_string().bold()),
     }
 }
