@@ -31,12 +31,12 @@ pub(crate) struct Controller {
 #[derive(Default)]
 struct SharedData {
     error: Option<Error>,
-    info_connection: Option<Result<Connection>>,
-    info_about: Option<Result<About>>,
-    info_memory: Option<Result<Memory>>,
-    info_spiflash: Option<Result<SPIFlash>>,
-    scan_result: Option<Result<Vec<Network>>>,
-    network_list: Option<Result<Vec<String>>>,
+    info_connection: Option<Connection>,
+    info_about: Option<About>,
+    info_memory: Option<Memory>,
+    info_spiflash: Option<SPIFlash>,
+    scan_result: Option<Vec<Network>>,
+    network_list: Option<Vec<String>>,
 }
 
 enum Command {
@@ -89,7 +89,7 @@ impl Controller {
         } else {
             data.info_connection
                 .take()
-                .unwrap_or_else(|| Err(data.error.take().unwrap()))
+                .ok_or_else(|| data.error.take().unwrap())
         }
     }
 
@@ -103,7 +103,7 @@ impl Controller {
         } else {
             data.info_about
                 .take()
-                .unwrap_or_else(|| Err(data.error.take().unwrap()))
+                .ok_or_else(|| data.error.take().unwrap())
         }
     }
 
@@ -117,7 +117,7 @@ impl Controller {
         } else {
             data.info_memory
                 .take()
-                .unwrap_or_else(|| Err(data.error.take().unwrap()))
+                .ok_or_else(|| data.error.take().unwrap())
         }
     }
 
@@ -131,7 +131,7 @@ impl Controller {
         } else {
             data.info_spiflash
                 .take()
-                .unwrap_or_else(|| Err(data.error.take().unwrap()))
+                .ok_or_else(|| data.error.take().unwrap())
         }
     }
 
@@ -145,7 +145,7 @@ impl Controller {
         } else {
             data.scan_result
                 .take()
-                .unwrap_or_else(|| Err(data.error.take().unwrap()))
+                .ok_or_else(|| data.error.take().unwrap())
         }
     }
 
@@ -159,7 +159,7 @@ impl Controller {
         } else {
             data.network_list
                 .take()
-                .unwrap_or_else(|| Err(data.error.take().unwrap()))
+                .ok_or_else(|| data.error.take().unwrap())
         }
     }
 
@@ -241,55 +241,49 @@ impl Controller {
                     Event::Disconnected => info!("Disconnected"),
                     Event::InfoConnection(res) => {
                         let mut data = mutex.lock().unwrap();
-                        data.info_connection = Some(res.map_err(Into::into));
+                        data.info_connection = Some(res);
                         cvar.notify_one();
                     }
                     Event::InfoAbout(res) => {
                         let mut data = mutex.lock().unwrap();
-                        data.info_about = Some(res.map_err(Into::into));
+                        data.info_about = Some(res);
                         cvar.notify_one();
                     }
                     Event::InfoMemory(res) => {
                         let mut data = mutex.lock().unwrap();
-                        data.info_memory = Some(res.map_err(Into::into));
+                        data.info_memory = Some(res);
                         cvar.notify_one();
                     }
                     Event::InfoSPIFlash(res) => {
                         let mut data = mutex.lock().unwrap();
-                        data.info_spiflash = Some(res.map_err(Into::into));
+                        data.info_spiflash = Some(res);
                         cvar.notify_one();
                     }
                     Event::WiFiScanResult(res) => {
                         let mut data = mutex.lock().unwrap();
-                        data.scan_result = Some(res.map_err(Into::into));
+                        data.scan_result = Some(res);
                         cvar.notify_one();
                     }
                     Event::WiFiNetworkList(res) => {
                         let mut data = mutex.lock().unwrap();
-                        data.network_list = Some(res.map_err(Into::into));
+                        data.network_list = Some(res);
                         cvar.notify_one();
                     }
-                    Event::WiFiSetNetwork(res) | Event::WiFiDeleteNetwork(res) => {
-                        let mut data = mutex.lock().unwrap();
-                        data.error = res.map_err(Into::into).err();
+                    Event::WiFiSetNetwork | Event::WiFiDeleteNetwork => {
                         cvar.notify_one();
                     }
                     Event::FileSync(res) => {
                         let mut data = mutex.lock().unwrap();
                         match res {
-                            Ok(Sync::Running) => info!("RUNNING"),
-                            Ok(Sync::Completed) => {
+                            Sync::Running => info!("RUNNING"),
+                            Sync::Completed => {
                                 info!("COMPLETED");
                                 data.error = None;
                                 cvar.notify_one();
                             }
-                            Err(e) => {
-                                data.error = Some(e.into());
-                                cvar.notify_one();
-                            }
                         }
                     }
-                    Event::GeneralError(e) => {
+                    Event::Error(e) => {
                         let mut data = mutex.lock().unwrap();
                         data.error = Some(e.into());
                         cvar.notify_one();
