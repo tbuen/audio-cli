@@ -87,7 +87,9 @@ impl Controller {
         if result.timed_out() {
             Err(Error::Timeout)
         } else {
-            data.info_connection.take().unwrap()
+            data.info_connection
+                .take()
+                .unwrap_or_else(|| Err(data.error.take().unwrap()))
         }
     }
 
@@ -99,7 +101,9 @@ impl Controller {
         if result.timed_out() {
             Err(Error::Timeout)
         } else {
-            data.info_about.take().unwrap()
+            data.info_about
+                .take()
+                .unwrap_or_else(|| Err(data.error.take().unwrap()))
         }
     }
 
@@ -111,7 +115,9 @@ impl Controller {
         if result.timed_out() {
             Err(Error::Timeout)
         } else {
-            data.info_memory.take().unwrap()
+            data.info_memory
+                .take()
+                .unwrap_or_else(|| Err(data.error.take().unwrap()))
         }
     }
 
@@ -123,7 +129,9 @@ impl Controller {
         if result.timed_out() {
             Err(Error::Timeout)
         } else {
-            data.info_spiflash.take().unwrap()
+            data.info_spiflash
+                .take()
+                .unwrap_or_else(|| Err(data.error.take().unwrap()))
         }
     }
 
@@ -135,7 +143,9 @@ impl Controller {
         if result.timed_out() {
             Err(Error::Timeout)
         } else {
-            data.scan_result.take().unwrap()
+            data.scan_result
+                .take()
+                .unwrap_or_else(|| Err(data.error.take().unwrap()))
         }
     }
 
@@ -147,7 +157,9 @@ impl Controller {
         if result.timed_out() {
             Err(Error::Timeout)
         } else {
-            data.network_list.take().unwrap()
+            data.network_list
+                .take()
+                .unwrap_or_else(|| Err(data.error.take().unwrap()))
         }
     }
 
@@ -276,6 +288,11 @@ impl Controller {
                                 cvar.notify_one();
                             }
                         }
+                    }
+                    Event::GeneralError(e) => {
+                        let mut data = mutex.lock().unwrap();
+                        data.error = Some(e.into());
+                        cvar.notify_one();
                     }
                 }
             }
