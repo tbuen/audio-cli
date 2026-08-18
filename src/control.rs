@@ -9,7 +9,8 @@ use std::time::Duration;
 
 use backend::DirectoryContent;
 use backend::{
-    About, Backend, ChangeDirectory, Connection, Event, Memory, Network, SPIFlash, Sync,
+    About, Backend, ChangeDirectory, Connection, Event, FileSync, Memory, Network, SPIFlash,
+    TagSync,
 };
 use log::{debug, info};
 
@@ -199,6 +200,18 @@ impl Controller {
         }
     }
 
+    pub(crate) fn sync_tags(&self) -> Result<()> {
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        self.backend.sync_tags();
+        let (mut data, result) = cvar.wait_timeout(data, Duration::from_mins(10)).unwrap();
+        if result.timed_out() {
+            Err(Error::Timeout)
+        } else {
+            data.error.take().map_or(Ok(()), Err)
+        }
+    }
+
     pub(crate) fn current_directory(&self) -> Result<String> {
         match self.backend.current_directory() {
             Ok(mut v) => Ok(v.pop().unwrap_or_default()),
@@ -275,8 +288,22 @@ impl Controller {
                     Event::FileSync(res) => {
                         let mut data = mutex.lock().unwrap();
                         match res {
-                            Sync::Running => info!("RUNNING"),
-                            Sync::Completed => {
+                            FileSync::Started => info!("STARTED"),
+                            FileSync::Aborted => info!("ABORTED"),
+                            FileSync::Completed => {
+                                info!("COMPLETED");
+                                data.error = None;
+                                cvar.notify_one();
+                            }
+                        }
+                    }
+                    Event::TagSync(res) => {
+                        let mut data = mutex.lock().unwrap();
+                        match res {
+                            TagSync::Started => info!("STARTED"),
+                            TagSync::Aborted => info!("ABORTED"),
+                            TagSync::Step(n, t) => debug!("progress: {n}/{t}"),
+                            TagSync::Completed => {
                                 info!("COMPLETED");
                                 data.error = None;
                                 cvar.notify_one();

@@ -71,7 +71,11 @@ impl<'a> Cli<'a> {
             .with_group(
                 Group::new("sync")
                     .with_help("Sync data from device.")
-                    .with_command(Command::new("files", sync_files).with_help("Sync file list.")),
+                    .with_command(Command::new("files", sync_files).with_help("Sync file list."))
+                    .with_command(
+                        Command::new("tags", sync_tags)
+                            .with_help("Sync tags of current and child directory."),
+                    ),
             )
             .with_group(
                 Group::new("fs")
@@ -246,6 +250,15 @@ fn sync_files(ctrl: Option<&Controller>, _: Args) {
     }
 }
 
+fn sync_tags(ctrl: Option<&Controller>, _: Args) {
+    let ctrl = ctrl.unwrap();
+    let result = ctrl.sync_tags();
+    match result {
+        Ok(()) => {}
+        Err(e) => println!("{}", e.to_string().bold()),
+    }
+}
+
 fn fs_pwd(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
     let result = ctrl.current_directory();
@@ -270,11 +283,14 @@ fn fs_ls(ctrl: Option<&Controller>, _: Args) {
     let result = ctrl.directory_content();
     match result {
         Ok(content) => {
-            for e in content.dirs {
-                println!("<{e}>");
+            for d in content.dirs {
+                println!("<{d}>");
             }
-            for e in content.files {
-                println!("{e}");
+            if let Some(c) = content.cover {
+                println!("#{c}#");
+            }
+            for t in content.tracks {
+                println!("{t}");
             }
         }
         Err(e) => println!("{}", e.to_string().bold()),
