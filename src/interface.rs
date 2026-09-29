@@ -100,6 +100,11 @@ impl<'a> Cli<'a> {
                     )
                     .with_command(Command::new("ls", tv_ls).with_help("Print directory content.")),
             )
+            .with_command(
+                Command::new("volume", volume)
+                    .with_help("Get/set current audio volume.")
+                    .with_optional_parameter(Parameter::int("value")),
+            )
             .build();
 
         Self { repl }
@@ -348,6 +353,23 @@ fn tv_ls(ctrl: Option<&Controller>, _: Args) {
             for t in titles {
                 println!("   {t}");
             }
+        }
+    }
+}
+
+fn volume(ctrl: Option<&Controller>, args: Args) {
+    let ctrl = ctrl.unwrap();
+    if let Some(val) = args.get_int("value").unwrap() {
+        let result = ctrl.set_volume(val);
+        match result {
+            Ok(()) => {}
+            Err(e) => println!("{}", e.to_string().bold()),
+        }
+    } else {
+        let result = ctrl.volume();
+        match result {
+            Ok(val) => println!("{val}dB"),
+            Err(e) => println!("{}", e.to_string().bold()),
         }
     }
 }

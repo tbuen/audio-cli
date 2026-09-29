@@ -37,6 +37,7 @@ struct SharedData {
     info_spiflash: Option<SPIFlash>,
     scan_result: Option<Vec<Network>>,
     network_list: Option<Vec<String>>,
+    volume: Option<i32>,
 }
 
 enum Command {
@@ -253,6 +254,25 @@ impl Controller {
         self.backend.tagview_content()
     }
 
+    pub(crate) fn volume(&self) -> Result<i32> {
+        let (mutex, _) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        data.volume
+            .ok_or(Error::Backend(backend::Error::NotConnected))
+    }
+
+    pub(crate) fn set_volume(&self, value: i32) -> Result<()> {
+        let (mutex, cvar) = &*self.shared;
+        let data = mutex.lock().unwrap();
+        self.backend.set_volume(value);
+        let (mut data, result) = cvar.wait_timeout(data, Duration::from_secs(3)).unwrap();
+        if result.timed_out() {
+            Err(Error::Timeout)
+        } else {
+            data.error.take().map_or(Ok(()), Err)
+        }
+    }
+
     fn thread(
         rx: Receiver<Command>,
         receiver: Receiver<Event>,
@@ -299,7 +319,7 @@ impl Controller {
                         data.network_list = Some(res);
                         cvar.notify_one();
                     }
-                    Event::WiFiSetNetwork | Event::WiFiDeleteNetwork => {
+                    Event::WiFiSetNetwork | Event::WiFiDeleteNetwork | Event::SetVolume => {
                         cvar.notify_one();
                     }
                     Event::FileSync(res) => {
