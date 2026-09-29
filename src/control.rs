@@ -7,10 +7,9 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
 
-use backend::DirectoryContent;
 use backend::{
-    About, Backend, ChangeDirectory, Connection, Event, FileSync, Memory, Network, SPIFlash,
-    TagSync,
+    About, Backend, ChangeDirection, Connection, Event, FileSync, FileViewContent, Memory, Network,
+    SPIFlash, TagSync, TagViewContent,
 };
 use log::{debug, info};
 
@@ -212,28 +211,46 @@ impl Controller {
         }
     }
 
-    pub(crate) fn current_directory(&self) -> Result<String> {
-        match self.backend.current_directory() {
-            Ok(mut v) => Ok(v.pop().unwrap_or_default()),
-            Err(e) => Err(e.into()),
-        }
+    pub(crate) fn fileview_current(&self) -> String {
+        self.backend.fileview_current().pop().unwrap_or_default()
     }
 
-    pub(crate) fn change_directory(&self, dir: &str) -> Result<()> {
+    pub(crate) fn fileview_change(&self, dir: &str) -> Result<()> {
         let d = {
             if dir == "/" {
-                ChangeDirectory::ToRoot
+                ChangeDirection::ToRoot
             } else if dir == ".." {
-                ChangeDirectory::ToParent
+                ChangeDirection::ToParent
             } else {
-                ChangeDirectory::ToChild(dir)
+                ChangeDirection::ToChild(dir)
             }
         };
-        self.backend.change_directory(d).map_err(Into::into)
+        self.backend.fileview_change(d).map_err(Into::into)
     }
 
-    pub(crate) fn directory_content(&self) -> Result<DirectoryContent> {
-        self.backend.directory_content().map_err(Into::into)
+    pub(crate) fn fileview_content(&self) -> FileViewContent {
+        self.backend.fileview_content()
+    }
+
+    pub(crate) fn tagview_current(&self) -> String {
+        self.backend.tagview_current().pop().unwrap_or_default()
+    }
+
+    pub(crate) fn tagview_change(&self, dir: &str) -> Result<()> {
+        let d = {
+            if dir == "/" {
+                ChangeDirection::ToRoot
+            } else if dir == ".." {
+                ChangeDirection::ToParent
+            } else {
+                ChangeDirection::ToChild(dir)
+            }
+        };
+        self.backend.tagview_change(d).map_err(Into::into)
+    }
+
+    pub(crate) fn tagview_content(&self) -> TagViewContent {
+        self.backend.tagview_content()
     }
 
     fn thread(

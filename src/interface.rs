@@ -1,6 +1,7 @@
 #![allow(clippy::print_stdout)]
 use std::cmp;
 
+use backend::FileViewContent;
 use colored::Colorize as _;
 use smart_repl::{Args, Command, Group, Parameter, Repl};
 
@@ -74,19 +75,30 @@ impl<'a> Cli<'a> {
                     .with_command(Command::new("files", sync_files).with_help("Sync file list."))
                     .with_command(
                         Command::new("tags", sync_tags)
-                            .with_help("Sync tags of current and child directory."),
+                            .with_help("Sync tags of current and child directories."),
                     ),
             )
             .with_group(
-                Group::new("fs")
-                    .with_help("Access file system.")
-                    .with_command(Command::new("pwd", fs_pwd).with_help("Print current directory."))
+                Group::new("file")
+                    .with_help("Access files.")
+                    .with_command(Command::new("pwd", fv_pwd).with_help("Print current directory."))
                     .with_command(
-                        Command::new("cd", fs_cd)
+                        Command::new("cd", fv_cd)
                             .with_help("Change directory.")
                             .with_parameter(Parameter::string("dir")),
                     )
-                    .with_command(Command::new("ls", fs_ls).with_help("Print directory content.")),
+                    .with_command(Command::new("ls", fv_ls).with_help("Print directory content.")),
+            )
+            .with_group(
+                Group::new("tag")
+                    .with_help("Access tags.")
+                    .with_command(Command::new("pwd", tv_pwd).with_help("Print current directory."))
+                    .with_command(
+                        Command::new("cd", tv_cd)
+                            .with_help("Change directory.")
+                            .with_parameter(Parameter::string("dir")),
+                    )
+                    .with_command(Command::new("ls", tv_ls).with_help("Print directory content.")),
             )
             .build();
 
@@ -259,40 +271,83 @@ fn sync_tags(ctrl: Option<&Controller>, _: Args) {
     }
 }
 
-fn fs_pwd(ctrl: Option<&Controller>, _: Args) {
+fn fv_pwd(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
-    let result = ctrl.current_directory();
-    match result {
-        Ok(v) => println!("{v}"),
-        Err(e) => println!("{}", e.to_string().bold()),
-    }
+    println!("{}", ctrl.fileview_current());
 }
 
-fn fs_cd(ctrl: Option<&Controller>, mut args: Args) {
+fn fv_cd(ctrl: Option<&Controller>, mut args: Args) {
     let ctrl = ctrl.unwrap();
     let dir = args.get_string("dir").unwrap().unwrap();
-    let result = ctrl.change_directory(&dir);
+    let result = ctrl.fileview_change(&dir);
     match result {
         Ok(()) => {}
         Err(e) => println!("{}", e.to_string().bold()),
     }
 }
 
-fn fs_ls(ctrl: Option<&Controller>, _: Args) {
+fn fv_ls(ctrl: Option<&Controller>, _: Args) {
     let ctrl = ctrl.unwrap();
-    let result = ctrl.directory_content();
-    match result {
-        Ok(content) => {
-            for d in content.dirs {
-                println!("<{d}>");
+    let content = ctrl.fileview_content();
+    match content {
+        FileViewContent::Folders(folders) => {
+            for f in folders {
+                println!("<{f}>");
             }
-            if let Some(c) = content.cover {
+        }
+        FileViewContent::Files { cover, tracks } => {
+            if let Some(c) = cover {
                 println!("#{c}#");
             }
-            for t in content.tracks {
+            for t in tracks {
                 println!("{t}");
             }
         }
+    }
+}
+
+fn tv_pwd(ctrl: Option<&Controller>, _: Args) {
+    let ctrl = ctrl.unwrap();
+    println!("{}", ctrl.tagview_current());
+}
+
+fn tv_cd(ctrl: Option<&Controller>, mut args: Args) {
+    let ctrl = ctrl.unwrap();
+    let dir = args.get_string("dir").unwrap().unwrap();
+    let result = ctrl.tagview_change(&dir);
+    match result {
+        Ok(()) => {}
         Err(e) => println!("{}", e.to_string().bold()),
+    }
+}
+
+fn tv_ls(ctrl: Option<&Controller>, _: Args) {
+    let ctrl = ctrl.unwrap();
+    let content = ctrl.tagview_content();
+    match content {
+        backend::TagViewContent::Genres(genres) => {
+            println!("Genres:");
+            for g in genres {
+                println!("   {g}");
+            }
+        }
+        backend::TagViewContent::Artists(artists) => {
+            println!("Artists:");
+            for a in artists {
+                println!("   {a}");
+            }
+        }
+        backend::TagViewContent::Albums(albums) => {
+            println!("Albums:");
+            for a in albums {
+                println!("   {a}");
+            }
+        }
+        backend::TagViewContent::Titles(titles) => {
+            println!("Titles:");
+            for t in titles {
+                println!("   {t}");
+            }
+        }
     }
 }
