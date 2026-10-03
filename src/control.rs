@@ -288,7 +288,11 @@ impl Controller {
             if let Ok(event) = receiver.recv_timeout(Duration::from_millis(10)) {
                 match event {
                     Event::Connected => info!("Connected"),
-                    Event::Disconnected => info!("Disconnected"),
+                    Event::Disconnected => {
+                        info!("Disconnected");
+                        let mut data = mutex.lock().unwrap();
+                        data.volume.take();
+                    }
                     Event::InfoConnection(res) => {
                         let mut data = mutex.lock().unwrap();
                         data.info_connection = Some(res);
@@ -346,6 +350,10 @@ impl Controller {
                                 cvar.notify_one();
                             }
                         }
+                    }
+                    Event::Volume(v) => {
+                        let mut data = mutex.lock().unwrap();
+                        data.volume = Some(v);
                     }
                     Event::Error(e) => {
                         let mut data = mutex.lock().unwrap();
